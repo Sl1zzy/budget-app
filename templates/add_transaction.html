@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Добавить запись - Семейный Бюджет{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-plus-circle"></i> Добавить транзакцию</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.type.label(class="form-label") }}
+                            {% if form.type.errors %}
+                                {{ form.type(class="form-select is-invalid") }}
+                                <div class="invalid-feedback">
+                                    {% for error in form.type.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {{ form.type(class="form-select") }}
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.amount.label(class="form-label") }}
+                            {% if form.amount.errors %}
+                                {{ form.amount(class="form-control is-invalid", placeholder="0.00") }}
+                                <div class="invalid-feedback">
+                                    {% for error in form.amount.errors %}
+                                        <span>{{ error }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                {{ form.amount(class="form-control", placeholder="0.00") }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.category.label(class="form-label") }}
+                        {% if form.category.errors %}
+                            {{ form.category(class="form-control is-invalid", placeholder="Например: Продукты, Зарплата, Транспорт") }}
+                            <div class="invalid-feedback">
+                                {% for error in form.category.errors %}
+                                    <span>{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            {{ form.category(class="form-control", placeholder="Например: Продукты, Зарплата, Транспорт") }}
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows="3", placeholder="Дополнительная информация (необязательно)") }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        {{ form.receipt.label(class="form-label") }}
+                        {{ form.receipt(class="form-control") }}
+                        <small class="text-muted">Поддерживаются форматы: JPG, PNG, GIF, PDF (макс. 16 MB)</small>
+                        {% if form.receipt.errors %}
+                            <div class="text-danger">
+                                {% for error in form.receipt.errors %}
+                                    <small>{{ error }}</small>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-grid">
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
