@@ -29,6 +29,10 @@ api.add_resource(TransactionListAPI, '/api/transactions/user/<int:user_id>')
 api.add_resource(TransactionStatsAPI, '/api/transactions/stats/<int:user_id>')
 api.add_resource(TransactionCRUDAPI, '/api/transactions/<int:transaction_id>')
 
+# --- АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ТАБЛИЦ ---
+with app.app_context():
+    db.create_all()
+    
 # Создание папки для загрузок если её нет
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
