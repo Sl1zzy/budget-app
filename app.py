@@ -1,9 +1,10 @@
-from flask import Flask, render_template, url_for, flash, redirect, request
+import os
+from flask import Flask, render_template, url_for, flash, redirect, request, session, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from functools import wraps
 
 from config import Config
 from models import db, User, Transaction
@@ -16,12 +17,27 @@ from flask_restful import Api
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Важно: секретный ключ для сессий
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or os.urandom(24).hex()
+
+# Настройки безопасности сессий
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # True только если HTTPS
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['REMEMBER_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
+
 # Инициализация расширений
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Пожалуйста, войдите для доступа к этой странице.'
 login_manager.login_message_category = 'info'
+login_manager.session_protection = "strong"
+login_manager.refresh_view = "login"
+login_manager.needs_refresh_message = "Для безопасности войдите заново."
+login_manager.needs_refresh_message_category = "warning"
 
 # Инициализация API
 api = Api(app)
@@ -29,26 +45,58 @@ api.add_resource(TransactionListAPI, '/api/transactions/user/<int:user_id>')
 api.add_resource(TransactionStatsAPI, '/api/transactions/stats/<int:user_id>')
 api.add_resource(TransactionCRUDAPI, '/api/transactions/<int:transaction_id>')
 
-# --- АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ТАБЛИЦ ---
+# Автоматическое создание таблиц при запуске
 with app.app_context():
     db.create_all()
-    
-# Создание папки для загрузок если её нет
+    print("✅ База данных инициализирована")
+
+# Создание папки для загрузок
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+
+# --- Декоратор проверки сессии ---
+def check_session(f):
+    """Проверяет что сессия соответствует текущему пользователю"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if current_user.is_authenticated:
+            # Сравниваем user_id в сессии с текущим пользователем
+            if session.get('user_id') != current_user.id:
+                logout_user()
+                session.clear()
+                flash('Обнаружена проблема с сессией. Пожалуйста, войдите заново.', 'danger')
+                return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# --- Загрузчик пользователя ---
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+# --- Обработчик неавторизованного доступа ---
+@login_manager.unauthorized_handler
+def unauthorized():
+    flash('Пожалуйста, войдите для доступа к этой странице.', 'warning')
+    return redirect(url_for('login'))
+
 
 # --- Маршруты ---
 
 @app.route('/')
 @app.route('/index')
+@check_session
 def index():
     if current_user.is_authenticated:
+        # Получаем транзакции только текущего пользователя
         transactions = Transaction.query.filter_by(user_id=current_user.id)\
             .order_by(Transaction.date_posted.desc()).limit(10).all()
-        totals = calculate_totals(Transaction.query.filter_by(user_id=current_user.id).all())
+        
+        # Считаем статистику только по транзакциям пользователя
+        user_transactions = Transaction.query.filter_by(user_id=current_user.id).all()
+        totals = calculate_totals(user_transactions)
         currency_rates = get_currency_rates()
     else:
         transactions = []
@@ -60,10 +108,13 @@ def index():
                            totals=totals,
                            currency_rates=currency_rates)
 
+
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    # Если пользователь уже авторизован - выходим
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        logout_user()
+        session.clear()
     
     form = RegisterForm()
     if form.validate_on_submit():
@@ -89,34 +140,57 @@ def register():
     
     return render_template('register.html', form=form)
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # Если пользователь уже авторизован - полностью разлогиниваем
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        logout_user()
+        session.clear()
     
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         
         if user and check_password_hash(user.password_hash, form.password.data):
-            login_user(user)
+            # Очищаем всё перед входом
+            logout_user()
+            session.clear()
+            
+            # Входим с опцией "запомнить меня"
+            login_user(user, remember=True)
+            
+            # Сохраняем ID пользователя в сессии для дополнительной проверки
+            session['user_id'] = user.id
+            session.permanent = True
+            
             flash(f'Добро пожаловать, {user.username}!', 'success')
             next_page = request.args.get('next')
+            
+            # Проверяем что next_page не ведёт на другой сайт
+            if next_page and not next_page.startswith('/'):
+                next_page = None
+            
             return redirect(next_page) if next_page else redirect(url_for('index'))
         else:
             flash('Неверный email или пароль.', 'danger')
     
     return render_template('login.html', form=form)
 
+
 @app.route('/logout')
 @login_required
 def logout():
+    # Полная очистка сессии
     logout_user()
+    session.clear()
     flash('Вы вышли из системы.', 'info')
     return redirect(url_for('index'))
 
+
 @app.route('/add', methods=['GET', 'POST'])
 @login_required
+@check_session
 def add_transaction():
     form = TransactionForm()
     if form.validate_on_submit():
@@ -126,14 +200,14 @@ def add_transaction():
         if form.receipt.data:
             receipt_filename = save_receipt(form.receipt.data)
         
-        # Создание транзакции
+        # Создание транзакции строго для текущего пользователя
         transaction = Transaction(
             amount=form.amount.data,
             type=form.type.data,
             category=form.category.data,
             description=form.description.data,
             receipt_path=receipt_filename,
-            user_id=current_user.id
+            user_id=current_user.id  # Привязка к текущему пользователю
         )
         
         db.session.add(transaction)
@@ -144,8 +218,10 @@ def add_transaction():
     
     return render_template('add_transaction.html', form=form)
 
+
 @app.route('/transaction/<int:transaction_id>')
 @login_required
+@check_session
 def transaction_detail(transaction_id):
     transaction = Transaction.query.get_or_404(transaction_id)
     
@@ -159,6 +235,7 @@ def transaction_detail(transaction_id):
 
 @app.route('/transaction/<int:transaction_id>/delete', methods=['POST'])
 @login_required
+@check_session
 def delete_transaction(transaction_id):
     transaction = Transaction.query.get_or_404(transaction_id)
     
@@ -167,11 +244,18 @@ def delete_transaction(transaction_id):
         flash('У вас нет доступа к этой транзакции.', 'danger')
         return redirect(url_for('index'))
     
+    # Удаляем файл чека если есть
+    if transaction.receipt_path:
+        receipt_full_path = os.path.join(app.config['UPLOAD_FOLDER'], transaction.receipt_path)
+        if os.path.exists(receipt_full_path):
+            os.remove(receipt_full_path)
+    
     db.session.delete(transaction)
     db.session.commit()
     
     flash('Транзакция успешно удалена!', 'success')
     return redirect(url_for('index'))
+
 
 # --- Обработчики ошибок ---
 
@@ -184,13 +268,6 @@ def internal_error(error):
     db.session.rollback()
     return render_template('500.html'), 500
 
-# --- Инициализация БД ---
-
-@app.cli.command('init-db')
-def init_db():
-    """Создает все таблицы в базе данных"""
-    db.create_all()
-    print('База данных инициализирована.')
 
 # --- Запуск ---
 
