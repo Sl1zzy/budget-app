@@ -3,6 +3,7 @@ from models import Transaction, User, db
 from flask import jsonify, request
 from datetime import datetime
 
+
 class TransactionListAPI(Resource):
     def get(self, user_id):
         """Получить все транзакции пользователя"""
@@ -26,6 +27,7 @@ class TransactionListAPI(Resource):
                 for t in transactions
             ]
         }
+
 
 class TransactionStatsAPI(Resource):
     def get(self, user_id):
@@ -53,6 +55,7 @@ class TransactionStatsAPI(Resource):
             'transaction_count': len(transactions)
         }
 
+
 class TransactionCRUDAPI(Resource):
     def get(self, transaction_id):
         """Получить конкретную транзакцию"""
@@ -69,6 +72,7 @@ class TransactionCRUDAPI(Resource):
             'user_id': transaction.user_id
         }
     
+    
     def put(self, transaction_id):
         """Обновить транзакцию"""
         transaction = Transaction.query.get_or_404(transaction_id)
@@ -84,6 +88,7 @@ class TransactionCRUDAPI(Resource):
         db.session.commit()
         
         return {'message': 'Транзакция обновлена', 'id': transaction.id}
+    
     
     def delete(self, transaction_id):
         """Удалить транзакцию"""

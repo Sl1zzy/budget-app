@@ -54,13 +54,12 @@ with app.app_context():
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 
-# --- Декоратор проверки сессии ---
+# Декоратор проверки сессии
 def check_session(f):
     """Проверяет что сессия соответствует текущему пользователю"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if current_user.is_authenticated:
-            # Сравниваем user_id в сессии с текущим пользователем
             if session.get('user_id') != current_user.id:
                 logout_user()
                 session.clear()
@@ -70,20 +69,20 @@ def check_session(f):
     return decorated_function
 
 
-# --- Загрузчик пользователя ---
+# Загрузчик пользователя
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
 
-# --- Обработчик неавторизованного доступа ---
+# Обработчик неавторизованного доступа
 @login_manager.unauthorized_handler
 def unauthorized():
     flash('Пожалуйста, войдите для доступа к этой странице.', 'warning')
     return redirect(url_for('login'))
 
 
-# --- Маршруты ---
+# Маршруты
 
 @app.route('/')
 @app.route('/index')
@@ -257,11 +256,12 @@ def delete_transaction(transaction_id):
     return redirect(url_for('index'))
 
 
-# --- Обработчики ошибок ---
+# Обработчики ошибок
 
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template('404.html'), 404
+
 
 @app.errorhandler(500)
 def internal_error(error):
@@ -269,7 +269,7 @@ def internal_error(error):
     return render_template('500.html'), 500
 
 
-# --- Запуск ---
+# Запуск
 
 if __name__ == '__main__':
     with app.app_context():

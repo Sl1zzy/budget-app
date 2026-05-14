@@ -3,6 +3,7 @@ import secrets
 from PIL import Image
 from flask import current_app
 
+
 def save_receipt(form_picture):
     """Сохраняет загруженный файл чека и возвращает имя файла"""
     random_hex = secrets.token_hex(8)
@@ -20,6 +21,7 @@ def save_receipt(form_picture):
         form_picture.save(picture_path)
     
     return picture_fn
+
 
 def get_currency_rates():
     """Получает курсы валют через внешний API"""
@@ -42,6 +44,7 @@ def get_currency_rates():
         'EUR': 0.010,
         'RUB': 1.0
     }
+
 
 def calculate_totals(transactions):
     """Подсчитывает итоги по доходам и расходам"""
