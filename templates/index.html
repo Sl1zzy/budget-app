@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Главная - Семейный Бюджет{% endblock %}
+{% block title %}Главная - BudgetApp{% endblock %}
 
 {% block content %}
 {% if current_user.is_authenticated %}
@@ -146,7 +146,7 @@
             <div class="card">
                 <div class="card-body text-center py-5">
                     <i class="bi bi-wallet2" style="font-size: 5rem; color: #667eea;"></i>
-                    <h1 class="mt-4">Семейный Бюджет</h1>
+                    <h1 class="mt-4">BudgetApp</h1>
                     <p class="lead">Управляйте своими финансами легко и эффективно</p>
                     <div class="mt-4">
                         <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg me-2">
